@@ -2,7 +2,7 @@ import { request } from 'undici'
 import { BILI_HEADERS, ENDPOINTS, MAX_ACCOUNTS, MULTI_USER } from '../config.js'
 import { store } from '../util/store.js'
 import { withAccount } from '../util/ctx.js'
-import { bili } from './client.js'
+import { bili, refreshDeviceIdentity } from './client.js'
 import { IMG, viaProxy } from '../util/images.js'
 
 const POLL_MESSAGES = {
@@ -17,8 +17,22 @@ const POLL_MESSAGES = {
  * the official app, and this client only ever receives the resulting cookies.
  */
 export async function generateQr() {
-  const data = await bili.get(`${ENDPOINTS.passport}/x/passport-login/web/qrcode/generate`)
-  return { url: data.url, key: data.qrcode_key }
+  const ask = async () => {
+    const data = await bili.get(`${ENDPOINTS.passport}/x/passport-login/web/qrcode/generate`)
+    return { url: data.url, key: data.qrcode_key }
+  }
+  try {
+    return await ask()
+  } catch (err) {
+    // Risk control attaches to the anonymous device identity, and a flagged one
+    // stays flagged -- every later attempt fails identically until it is
+    // replaced. That is fatal here in a way it is not elsewhere: this is the
+    // endpoint people need in order to sign in at all, so a "come back later"
+    // leaves them with no way in. Rebuilding the identity is rate limited to
+    // once a minute inside refreshDeviceIdentity.
+    if (err?.code === -352 && (await refreshDeviceIdentity())) return ask()
+    throw err
+  }
 }
 
 export async function pollQr(qrcodeKey) {
