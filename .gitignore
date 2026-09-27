@@ -1,0 +1,20 @@
+node_modules/
+dist/
+data/
+.env
+src-tauri/target/
+*.log
+
+# android/ is tracked: the generated project carries real edits (cleartext
+# network config, splash theme, generated launcher icons) that `cap add`
+# would not reproduce. Only the machine-specific and build outputs are out.
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/app/src/main/assets/public/
+android/capacitor-cordova-android-plugins/
+web/dist-native/
+
+# Screenshots taken while working on the UI; not part of the project.
+audit-*.png

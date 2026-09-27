@@ -1,0 +1,25 @@
+{
+  "appId": "app.bilinext.client",
+  "appName": "BiliNext",
+  "webDir": "web/dist-native",
+  "android": {
+    "allowMixedContent": true,
+    "backgroundColor": "#0f1117"
+  },
+  "server": {
+    "androidScheme": "http",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 600,
+      "backgroundColor": "#0f1117",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#17181A",
+      "overlaysWebView": false
+    }
+  }
+}

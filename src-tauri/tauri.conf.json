@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BiliNext",
+  "version": "0.1.0",
+  "identifier": "app.bilinext.client",
+  "build": {
+    "frontendDist": "../web/dist",
+    "devUrl": "http://localhost:5173",
+    "beforeDevCommand": "npm -w web run dev",
+    "beforeBuildCommand": "npm -w web run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "BiliNext",
+        "width": 1360,
+        "height": 860,
+        "minWidth": 380,
+        "minHeight": 560,
+        "resizable": true,
+        "decorations": true,
+        "theme": "Dark"
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": ["icons/icon.png"]
+  }
+}

@@ -1,0 +1,82 @@
+import { request } from 'undici'
+import { BILI_HEADERS, ENDPOINTS } from '../config.js'
+import { store } from '../util/store.js'
+import { bili } from './client.js'
+import { IMG, viaProxy } from '../util/images.js'
+
+const POLL_MESSAGES = {
+  0: 'ok',
+  86038: 'QR code 已過期,請重新產生',
+  86090: '已掃碼,請在手機上確認登入',
+  86101: '等待掃碼',
+}
+
+/**
+ * QR login is deliberately the only supported path: the password never leaves
+ * the official app, and this client only ever receives the resulting cookies.
+ */
+export async function generateQr() {
+  const data = await bili.get(`${ENDPOINTS.passport}/x/passport-login/web/qrcode/generate`)
+  return { url: data.url, key: data.qrcode_key }
+}
+
+export async function pollQr(qrcodeKey) {
+  const target = new URL(`${ENDPOINTS.passport}/x/passport-login/web/qrcode/poll`)
+  target.searchParams.set('qrcode_key', qrcodeKey)
+
+  // Read cookies off the raw response: the login credentials arrive only as
+  // Set-Cookie headers, not in the JSON body.
+  const res = await request(target, { headers: BILI_HEADERS })
+  const body = await res.body.json()
+  const code = body?.data?.code
+
+  if (code !== 0) {
+    return { status: 'pending', code, message: POLL_MESSAGES[code] || body?.data?.message || '等待掃碼' }
+  }
+
+  const raw = res.headers['set-cookie']
+  const lines = Array.isArray(raw) ? raw : raw ? [raw] : []
+  const cookies = {}
+  for (const line of lines) {
+    const [pair] = line.split(';')
+    const i = pair.indexOf('=')
+    if (i > 0) cookies[pair.slice(0, i).trim()] = pair.slice(i + 1).trim()
+  }
+  if (!cookies.SESSDATA) {
+    return { status: 'pending', code: -1, message: '登入回應缺少憑證,請重試' }
+  }
+
+  // refresh_token lets us renew the session later without another scan.
+  const account = {
+    mid: String(cookies.DedeUserID),
+    cookies,
+    refreshToken: body.data.refresh_token || null,
+    addedAt: Date.now(),
+  }
+  store.saveAccount(account)
+
+  const nav = await bili.get('/x/web-interface/nav')
+  const full = store.saveAccount({
+    ...account,
+    name: nav.uname,
+    face: nav.face,
+    level: nav.level_info?.current_level,
+    vipStatus: nav.vipStatus,
+  })
+
+  const { cookies: _hidden, refreshToken: _rt, ...safe } = full
+  return { status: 'ok', account: { ...safe, face: viaProxy(safe.face, 'image', IMG.avatar) } }
+}
+
+export async function logout(mid) {
+  try {
+    const csrf = store.all.accounts[mid]?.cookies?.bili_jct
+    if (csrf) {
+      await bili.post(`${ENDPOINTS.passport}/login/exit/v2`, { biliCSRF: csrf })
+    }
+  } catch {
+    // Revoking server-side is best effort; dropping the local cookies is what
+    // actually matters for this machine.
+  }
+  store.removeAccount(mid)
+}

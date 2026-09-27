@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  BiliNext talks to a BiliNext server the user runs themselves, normally a PC
+  on the same Wi-Fi reached as http://192.168.x.x:8787. Android blocks plain
+  HTTP by default from API 28 on, and a network security config can only name
+  concrete hosts; there is no way to express "any address on my LAN". So
+  cleartext has to be permitted app-wide for that to work at all. Nothing else
+  is relaxed: certificate validation for https is untouched, so pointing the
+  app at an https VPS still gets a fully verified connection.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

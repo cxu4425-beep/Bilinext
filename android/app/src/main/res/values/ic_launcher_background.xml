@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The generated foreground layer is full-bleed pink, so this only shows
+         through while a launcher animates the icon; white flashed bright there. -->
+    <color name="ic_launcher_background">#FB7299</color>
+</resources>

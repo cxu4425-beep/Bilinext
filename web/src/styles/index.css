@@ -1,0 +1,255 @@
+@import 'tailwindcss';
+
+/*
+ * Tailwind v4 reads design tokens straight from @theme, so the palette below is
+ * the single source of truth for both utility classes and hand-written CSS.
+ */
+@theme {
+  /*
+   * Palette lifted from the bilibili desktop client's own token set (read out
+   * of the running app), rather than eyeballed. Two things there are easy to
+   * get wrong and both were wrong here before:
+   *
+   *  - Their greys are genuinely neutral. A blue-tinted dark grey reads as
+   *    "some other app" no matter how close the accent colour is.
+   *  - The brand pink is desaturated for dark mode (#FF6699 -> #D44E7D).
+   *    The bright pink on a dark ground is harsh and is not what they ship.
+   */
+  --color-ink-950: #0a0b0c; /* bg3  */
+  --color-ink-900: #101011; /* bg2  */
+  --color-ink-850: #17181a; /* bg1  */
+  --color-ink-800: #1e2022; /* graph_bg_thin   */
+  --color-ink-700: #232527; /* graph_bg_regular */
+  --color-ink-600: #2f3134; /* line_regular / graph_bg_thick */
+  --color-ink-400: #46494d; /* text4 / line_bold */
+  --color-ink-300: #757a81; /* text3 */
+  --color-ink-200: #a2a7ae; /* text2 */
+  --color-ink-100: #e7e9eb; /* text1 */
+
+  --color-pink-brand: #ff6699;
+  --color-pink-dark: #d44e7d;
+  --color-pink-deep: #e0507b;
+  --color-cyan-brand: #58b1d4; /* text_link */
+  --color-bili: #00aeec;
+  --color-bili-dark: #0087bd;
+  --color-bili-soft: #e5f6fd;
+
+  --font-sans: 'PingFang SC', 'PingFang TC', HarmonyOS_Regular, 'Helvetica Neue',
+    'Microsoft JhengHei', 'Microsoft YaHei', 'Noto Sans TC', system-ui, sans-serif;
+
+  /* Their scale: 4 / 6 / 8 / 10. Cards are 6px -- far squarer than the 14px
+     this app used, which was the loudest difference in shape. */
+  --radius-card: 6px;
+  --radius-chip: 8px;
+
+  /* Type scale: fs_1..fs_6 */
+  --text-fs1: 24px;
+  --text-fs2: 18px;
+  --text-fs3: 16px;
+  --text-fs4: 14px;
+  --text-fs5: 13px;
+  --text-fs6: 12px;
+}
+
+:root {
+  color-scheme: dark;
+  /* Cards sit *lighter* than the page, the way the desktop client stacks
+     bg1 surfaces on a bg2 background. */
+  --bg: var(--color-ink-900); /* bg2 */
+  --surface: var(--color-ink-850); /* bg1 */
+  --surface-2: var(--color-ink-700); /* graph_bg_regular */
+  --border: var(--color-ink-600); /* line_regular */
+  --text: var(--color-ink-100); /* text1 */
+  --text-dim: var(--color-ink-200); /* text2 */
+  --text-faint: var(--color-ink-300); /* text3 */
+  --accent: var(--color-pink-dark);
+  --accent-strong: var(--color-pink-brand);
+  --link: var(--color-cyan-brand);
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f6f7f8; /* bg2 */
+  --surface: #ffffff; /* bg1 */
+  --surface-2: #f1f2f3; /* bg3 */
+  --border: #e3e5e7; /* line_regular */
+  --text: #18191c; /* text1 */
+  --text-dim: #61666d; /* text2 */
+  --text-faint: #9499a0; /* text3 */
+  /* Light mode uses the full-strength pink; only dark needs it toned down. */
+  --accent: var(--color-pink-brand);
+  --accent-strong: var(--color-pink-brand);
+  --link: #00699d; /* text_link */
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  overscroll-behavior-y: none;
+}
+
+/* Respect the notch / gesture bar once installed as a standalone app. */
+.safe-top {
+  padding-top: env(safe-area-inset-top);
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.dim {
+  color: var(--text-dim);
+}
+
+/* A restrained scrollbar; the default one is very loud on dark surfaces. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--surface-2);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-600);
+  background-clip: content-box;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rise {
+  animation: rise 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-2);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.06), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+/* Danmaku sits above the video but must never eat pointer events. */
+.danmaku-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Shared form control, used across the publish and settings forms. */
+.input {
+  width: 100%;
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  border: 1px solid transparent;
+  color: var(--text);
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+textarea.input {
+  height: auto;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.5;
+}
+.input:focus {
+  border-color: var(--accent);
+}
+.input::placeholder {
+  color: var(--text-dim);
+}
+
+/*
+ * The transient play/pause flourish bilibili shows in the centre of the video.
+ * It replaces a persistent dark overlay: the frame stays fully visible and the
+ * icon simply expands and fades away.
+ */
+@keyframes toggle-pop {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.8);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+.toggle-pop {
+  animation: toggle-pop 0.52s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Double-tap seek feedback on touch: a brief fade, no movement, so it reads
+   as confirmation rather than competing with the picture. */
+@keyframes gesture-flash {
+  0% {
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+.gesture-flash {
+  animation: gesture-flash 0.7s ease-out forwards;
+}

@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <!-- The app's own page background, so the launch screen and the first
+         painted frame are the same colour and there is no white flash. -->
+    <color name="splashBackground">#0F1117</color>
+</resources>
