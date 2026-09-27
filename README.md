@@ -54,10 +54,30 @@ bilibili 的 API 與 CDN 會檢查 `Referer`,而瀏覽器**不允許網頁自行
 
 ## 快速開始
 
-在專案資料夾**按兩下 `start-bilinext.cmd`**。第一次會自動安裝相依套件並建置,之後只要幾秒;
-伺服器就緒後會自動開啟瀏覽器。
+在專案資料夾**按兩下 `bilinext.cmd`**。第一次會自動安裝相依套件並建置,之後只要幾秒。
 
 那個黑色視窗就是伺服器 —— **用 App 的時候要讓它開著**,關掉視窗就等於關掉伺服器。
+它會一次把三種用法都準備好,並印出各自的位址:
+
+```
+  --------------------------------------------------------------
+  BiliNext is running. Keep this window open.
+  --------------------------------------------------------------
+  On this computer   http://localhost:8787
+  On your Wi-Fi      http://192.168.0.142:8787
+  From anywhere      https://fingers-editorial-along-tsunami.trycloudflare.com
+
+  Access key         c56cd3f250474612bde4786652edf0440...
+  --------------------------------------------------------------
+  Scan with your phone to open the app with the key already filled in:
+  [ QR code ]
+```
+
+- **區網位址**挑的是有預設閘道的網卡,不會印出 VPN / WSL / Hyper-V 那些手機連不到的虛擬位址。
+- **公開網址**需要 cloudflared(`winget install --id Cloudflare.cloudflared -e`);沒裝就只印前兩個,其他照常運作。
+- **存取金鑰**第一次執行時產生,存在 `data/access-key`。因為伺服器這時對整個區網開放,而它是登入狀態的,
+  所以金鑰一律啟用 —— 詳見[從外面連](#從外面連公開網址)。
+- **QR code** 掃了就直接打開 App 並把位址和金鑰填好,不用手打。
 
 或用指令:
 
@@ -83,8 +103,8 @@ install-autostart.cmd
 
 ### 重複啟動 / 連接埠被占用
 
-`start-bilinext.cmd` 會先用 `netstat` 檢查 8787 有沒有人在聽。
-已經有 server 在跑的話,它只會開瀏覽器然後結束,**不會**去搶連接埠。
+兩個啟動檔都會先確認 8787 有沒有人在聽。已經有 server 在跑的話,它只會提示你用現有的那個,
+**不會**去搶連接埠。
 
 若是被其他程式占用,server 會印一行說明後以狀態碼 1 結束,不會噴 Node 的堆疊訊息:
 
@@ -110,31 +130,23 @@ npm run dev
 
 ## 手機使用
 
-伺服器預設只接受這台電腦的連線，避免同一個 Wi-Fi 的其他裝置直接操作已登入的帳號。
-要從手機使用,改成按兩下 **`start-bilinext-lan.cmd`**(等同 `HOST=0.0.0.0`):
+**用相機掃 `bilinext.cmd` 印出來的 QR code。** 就這樣 —— 它會打開 App,位址和金鑰都已經填好。
 
-```bash
-# 或用指令
-set HOST=0.0.0.0 && npm start        # cmd.exe
-$env:HOST='0.0.0.0'; npm start       # PowerShell
-```
-
-這個模式會在視窗裡直接印出手機要輸入的位址,不必自己查 `ipconfig`:
+QR 裡的連結長這樣:
 
 ```
-  BiliNext  -  http://localhost:8787
-  LAN mode - other devices on this Wi-Fi can reach this server.
-  Enter this in the phone app:  http://192.168.0.142:8787
+https://xxx.trycloudflare.com/#/setup?key=c56cd3f2...
 ```
 
-它挑的是**有預設閘道**的網卡,所以不會印出 VPN / WSL / Hyper-V 那些手機連不到的虛擬位址。
+金鑰放在 `#` 後面的**片段**是刻意的:片段永遠不會送到伺服器,所以就算頁面是掛在 GitHub Pages 上,
+金鑰也只留在手機裡,不會進任何人的存取紀錄。App 讀完會立刻把它從網址列清掉。
 
 手機端有兩種用法:
 
-- **瀏覽器 + 加到主畫面** —— 開 `http://<你的IP>:8787`,PWA,有圖示、全螢幕、離線殼層。
-- **APK** —— 見下方「打包成安裝檔」。
+- **瀏覽器 + 加到主畫面** —— 掃 QR 之後選「加到主畫面」,就是 PWA,有圖示、全螢幕、離線殼層。
+- **APK** —— 見下方[打包成安裝檔](#打包成安裝檔)。APK 不能掃 QR,但可以把那行連結整串貼進設定畫面,一樣會自動拆出位址和金鑰。
 
-兩種都需要伺服器在區網模式下執行;`start-bilinext.cmd`(不帶 lan)只有這台電腦連得到。
+沒有公開網址(沒裝 cloudflared)時,QR 指的是區網位址,只有同一個 Wi-Fi 連得到。
 
 ## 從外面連(公開網址)
 
@@ -154,24 +166,18 @@ $env:HOST='0.0.0.0'; npm start       # PowerShell
 
 代價是金鑰會出現在圖片網址裡(瀏覽器的網路紀錄看得到)。自用可以接受,但**別把畫面或網址分享出去**。
 
-### 開一條通道
+### 通道
 
-```
-start-bilinext-tunnel.cmd
-```
-
-它會:第一次執行時產生金鑰存在 `data\access-key`(不會進 git)、把伺服器綁在 `127.0.0.1`(外面只能從通道進來)、
-開一個 Cloudflare quick tunnel 並在另一個視窗印出 `https://xxx.trycloudflare.com` 這樣的網址。
-
-需要先裝一次 cloudflared:
+`bilinext.cmd` 只要偵測到 cloudflared 就會自動開一條 Cloudflare quick tunnel,不用另外做什麼。沒裝的話:
 
 ```bash
 winget install --id Cloudflare.cloudflared -e
 ```
 
-**quick tunnel 的網址每次重開都會變。** 要固定網址得註冊 Cloudflare 帳號建一條具名 tunnel,那是另一套設定。
+(裝完要**開新的終端機**,或直接重跑 `bilinext.cmd`,不然 PATH 還是舊的。)
 
-拿到網址後,在 App 的設定畫面填網址和金鑰就能用了。
+**quick tunnel 的網址每次重開都會變。** 要固定網址得註冊 Cloudflare 帳號建一條具名 tunnel,那是另一套設定。
+網址一變,手機上存的舊位址就失效了,重掃一次 QR 即可。
 
 ### 從 GitHub Pages 使用
 
@@ -180,7 +186,7 @@ winget install --id Cloudflare.cloudflared -e
 它一樣要連到你的伺服器,而且**只能連 https 的位址** —— Pages 強制 https,瀏覽器禁止 https 頁面呼叫 http,
 所以填家裡的 `http://192.168.x.x:8787` 一定會被擋掉,必須用上面的通道網址。
 
-伺服器那邊要允許這個來源(`start-bilinext-tunnel.cmd` 已經設好了):
+伺服器那邊要允許這個來源(`bilinext.cmd` 已經設好了):
 
 ```
 set BILI_ALLOWED_ORIGINS=https://cxu4425-beep.github.io
@@ -209,7 +215,7 @@ npm run android:apk      # 建置前端 → cap sync → gradlew assembleDebug
 也無法直接升級成別的金鑰簽的版本。要出正式版得自己產一份 keystore 並設定簽章設定;
 `npm run android:aab` 目前產出的是**未簽章**的 bundle。
 
-APK 需要伺服器以**區網模式**執行(`start-bilinext-lan.cmd`),否則手機連不到。
+APK 需要伺服器用 `bilinext.cmd` 啟動(這個模式才對區網和外網開放),否則手機連不到。
 
 需要的工具鏈:JDK 21 與 Android SDK(platform 35、build-tools 35)。
 兩者的路徑寫死在 `android/gradle.properties`(`org.gradle.java.home`)和
@@ -244,8 +250,7 @@ APK 那份(hash 路由、API 位址是空的),等於把網頁版換掉。這個�
 
 APK 內只有前端,所以會先出現設定畫面要你填伺服器位址:
 
-- 在電腦執行 `start-bilinext.cmd`,標題下面會直接印出要輸入的位址
-  (它挑的是**有預設閘道**的網卡,避開 VPN / WSL / Hyper-V 那些連不到的虛擬網卡)。
+- 在電腦執行 `bilinext.cmd`,把它印在 QR code 上面那行連結整串貼進來,位址和金鑰會自動拆開。
 - 或按「自動搜尋」,它會掃常見的家用網段找會回應 `/api/health` 的機器。掃描放在
   按鈕後面而不是自動執行 —— 在別人的網路上打幾百個請求,應該是使用者主動要求的。
 
@@ -478,4 +483,14 @@ server/src/
 web/src/
   components/    播放器、彈幕、留言、投票、Composer
   pages/         首頁、影片、收藏、訊息、投稿、投票、設定
+scripts/
+  launch.mjs     bilinext.cmd 的實作:金鑰、區網位址、通道、QR code
+  android-apk.mjs  呼叫 android/ 的 Gradle wrapper
 ```
+
+啟動檔有兩個,差別只在對外開放程度:
+
+| | 對誰開放 | 金鑰 | 用途 |
+| --- | --- | --- | --- |
+| `bilinext.cmd` | 本機 + 區網 + 通道 | 一律啟用 | 平常用這個 |
+| `start-bilinext.cmd` | 只有本機 | 無 | 只在這台電腦用;開機自動啟動走的也是它 |

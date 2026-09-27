@@ -22,6 +22,17 @@ const normalise = (raw: string) => {
   return `${withScheme}:${PORT}`
 }
 
+/**
+ * Accepts the whole setup link bilinext.cmd prints, not just an address, so
+ * the line under the QR code can simply be pasted in.
+ */
+function parsePasted(raw: string): { address: string; key?: string } {
+  const [addr, fragment] = raw.trim().split('#')
+  if (!fragment?.includes('?')) return { address: addr }
+  const params = new URLSearchParams(fragment.slice(fragment.indexOf('?') + 1))
+  return { address: params.get('server') || addr, key: params.get('key') || undefined }
+}
+
 type Probe = { ok: true; version: string; needsKey: boolean }
 
 /**
@@ -88,27 +99,31 @@ export default function ServerSetup() {
   }
 
   /** Shared by the address form and the scanner once a server has answered. */
-  const finish = async (base: string, hit: Probe) => {
+  const finish = async (base: string, hit: Probe, keyToUse: string) => {
     if (!hit.needsKey) return accept(base, hit.version, '')
     setKeyNeeded(true)
-    if (!key.trim()) {
+    if (!keyToUse) {
       setNote({ text: '這台伺服器需要存取金鑰,請填在下面。', bad: true })
       return
     }
-    if (!(await keyWorks(base, key.trim()))) {
+    if (!(await keyWorks(base, keyToUse))) {
       setNote({ text: '金鑰不正確。', bad: true })
       return
     }
-    accept(base, hit.version, key.trim())
+    accept(base, hit.version, keyToUse)
   }
 
   const connect = async () => {
-    const base = normalise(value)
+    const pasted = parsePasted(value)
+    const base = normalise(pasted.address)
     if (!base) return
+    // A pasted setup link carries its own key; show it so it is not a mystery.
+    const keyToUse = (pasted.key || key).trim()
+    if (pasted.key && pasted.key !== key) setKey(pasted.key)
     setBusy(true)
     setNote(null)
     const hit = await probe(base, 4000)
-    if (hit) await finish(base, hit)
+    if (hit) await finish(base, hit, keyToUse)
     else
       setNote({
         text: `${base} 沒有回應。確認電腦上的 BiliNext 伺服器正在執行,且手機和電腦連到同一個 Wi-Fi。`,
@@ -147,10 +162,10 @@ export default function ServerSetup() {
     }
     await Promise.all(Array.from({ length: SCAN_CONCURRENCY }, worker))
     setScanning(false)
-    if (found.at) await finish(found.at.base, found.at.hit)
+    if (found.at) await finish(found.at.base, found.at.hit, key.trim())
     else
       setNote({
-        text: '沒有找到伺服器。請在電腦上執行 start-bilinext-lan.cmd,它會顯示要輸入的位址。',
+        text: '沒有找到伺服器。請在電腦上執行 bilinext.cmd,它會顯示位址和 QR code。',
         bad: true,
       })
   }
@@ -163,9 +178,9 @@ export default function ServerSetup() {
         <div className="text-center space-y-1.5">
           <h1 className="text-2xl font-bold">BiliNext</h1>
           <p className="text-sm dim leading-relaxed">
-            這個 App 需要連到你執行 BiliNext 伺服器的機器。
+            在電腦上執行 <code>bilinext.cmd</code>,把它印出來的那行連結貼進來
             <br />
-            同一個 Wi-Fi 就填電腦的區網位址,從外面連就填你的公開網址。
+            (或只填位址,金鑰另外填)。
           </p>
         </div>
 
@@ -174,7 +189,7 @@ export default function ServerSetup() {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && connect()}
-            placeholder="192.168.1.20 或 https://xxx.trycloudflare.com"
+            placeholder="貼上連結,或輸入 192.168.1.20"
             inputMode="url"
             autoCapitalize="off"
             autoCorrect="off"

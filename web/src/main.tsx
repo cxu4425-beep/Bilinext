@@ -4,7 +4,7 @@ import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import ServerSetup from './components/ServerSetup'
-import { REMOTE_API, serverUrl } from './api/client'
+import { REMOTE_API, serverUrl, setServerKey, setServerUrl } from './api/client'
 import './styles/index.css'
 
 const queryClient = new QueryClient({
@@ -26,6 +26,29 @@ const queryClient = new QueryClient({
 
 const saved = localStorage.getItem('bili.theme')
 if (saved) document.documentElement.dataset.theme = saved
+
+/**
+ * Picks up the settings from the QR code bilinext.cmd prints
+ * (`.../#/setup?key=...&server=...`), so a phone never has to be told an
+ * address and a key by hand.
+ *
+ * They ride in the fragment deliberately: fragments are never sent to a
+ * server, so the key stays on the device even when the page itself is hosted
+ * on GitHub Pages. It is stripped from the address bar immediately afterwards.
+ */
+function consumeSetupLink() {
+  const { hash, search, pathname } = window.location
+  const query = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : search.slice(1)
+  if (!query) return
+  const params = new URLSearchParams(query)
+  const key = params.get('key')
+  const server = params.get('server')
+  if (!key && !server) return
+  if (key) setServerKey(key)
+  if (server) setServerUrl(server.replace(/\/+$/, ''))
+  window.history.replaceState(null, '', pathname + (REMOTE_API ? '#/' : ''))
+}
+consumeSetupLink()
 
 /**
  * The APK is a folder of files with no server behind it, so reloading on
