@@ -101,9 +101,13 @@ export const useApp = create<State>((set, get) => ({
   dismissToast: (id) => set({ toasts: get().toasts.filter((t) => t.id !== id) }),
 
   setServerOnline: (online: boolean) => {
-    if (get().serverOnline !== online) set({ serverOnline: online })
+    const wasOnline = get().serverOnline
+    if (wasOnline === online) return
+    set({ serverOnline: online })
     // Coming back up: pull the session again so the header stops looking
-    // logged out the moment the server returns.
+    // logged out the moment the server returns. Only on the transition --
+    // refreshMe's own response reports "online" too, so reacting to every
+    // response loops forever for anyone who is not signed in.
     if (online && !get().loggedIn) get().refreshMe()
   },
 

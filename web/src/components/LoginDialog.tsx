@@ -18,6 +18,11 @@ export default function LoginDialog({ open, onClose }: { open: boolean; onClose:
   // Bumping this re-runs the effect, which is how "regenerate" gets a fresh code.
   const [attempt, setAttempt] = useState(0)
   const { refreshMe, toast } = useApp()
+  // Held in a ref so the effect below depends only on open/attempt. The parent
+  // passes a fresh arrow on every render, and each re-run of the effect asks
+  // bilibili for another QR code -- a re-render must never cost a request.
+  const latest = useRef({ refreshMe, toast, onClose })
+  latest.current = { refreshMe, toast, onClose }
 
   useEffect(() => {
     if (!open) return
@@ -52,9 +57,9 @@ export default function LoginDialog({ open, onClose }: { open: boolean; onClose:
               // On a shared server the scan is what creates the session; from
               // here on every request identifies itself with this token.
               if (res.session) setServerKey(res.session)
-              await refreshMe()
-              toast(`已登入:${res.account?.name ?? ''}`, 'ok')
-              setTimeout(onClose, 700)
+              await latest.current.refreshMe()
+              latest.current.toast(`已登入:${res.account?.name ?? ''}`, 'ok')
+              setTimeout(() => latest.current.onClose(), 700)
               return
             }
             if (res.code === 86038) {
@@ -81,7 +86,7 @@ export default function LoginDialog({ open, onClose }: { open: boolean; onClose:
       cancelled = true
       clearTimeout(timer)
     }
-  }, [open, attempt, refreshMe, toast, onClose])
+  }, [open, attempt])
 
   if (!open) return null
 
@@ -143,6 +148,16 @@ export default function LoginDialog({ open, onClose }: { open: boolean; onClose:
         >
           {label[status]}
         </p>
+        {status === 'error' && (
+          <div className="mt-3 text-center">
+            <button
+              onClick={() => setAttempt((n) => n + 1)}
+              className="px-4 h-8 rounded-full bg-[var(--surface-2)] text-sm font-medium"
+            >
+              重試
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -7,7 +7,24 @@ import { currentToken } from '../util/ctx.js'
 import { IMG, viaProxy } from '../util/images.js'
 
 export default async function authRoutes(app) {
-  app.get('/api/auth/qr', async () => generateQr())
+  /**
+   * One QR code per visitor every few seconds is far more than a person
+   * needs. The cap exists for browsers still running a build that asked for a
+   * new code on every re-render: their flood is turned away here, quietly,
+   * before it can reach bilibili or fill the log. Behind the tunnel every
+   * request comes from 127.0.0.1, so Cloudflare's client address is the key.
+   */
+  const lastQr = new Map()
+  app.get('/api/auth/qr', async (req, reply) => {
+    const who = String(req.headers['cf-connecting-ip'] || req.ip)
+    const now = Date.now()
+    if (now - (lastQr.get(who) || 0) < 3000) {
+      return reply.code(429).send({ error: '請求太頻繁,請稍候再按一次', code: -429 })
+    }
+    lastQr.set(who, now)
+    if (lastQr.size > 5000) lastQr.clear()
+    return generateQr()
+  })
 
   /**
    * A successful scan is what creates a session: the token it returns is how
