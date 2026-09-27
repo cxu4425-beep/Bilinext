@@ -1,5 +1,6 @@
 import * as api from '../bili/api.js'
 import { store } from '../util/store.js'
+import { currentAccount } from '../bili/client.js'
 import { IMG, viaProxy } from '../util/images.js'
 import { normaliseDynamic } from '../util/dynamic.js'
 
@@ -105,7 +106,7 @@ export default async function contentRoutes(app) {
 
   app.get('/api/video/:bvid', async (req) => {
     const { bvid } = req.params
-    const loggedIn = Boolean(store.activeAccount())
+    const loggedIn = Boolean(currentAccount())
     const [detail, relation, coins, watchLater] = await Promise.all([
       api.getVideoDetail(bvid),
       api.getVideoRelation(bvid).catch(() => null),
@@ -159,7 +160,7 @@ export default async function contentRoutes(app) {
    * a position is only meaningful for the part it was recorded on.
    */
   app.get('/api/video/:bvid/resume', async (req) => {
-    if (!store.activeAccount()) return { cid: null, seconds: 0 }
+    if (!currentAccount()) return { cid: null, seconds: 0 }
     const info = await api.getPlayerInfo(req.params.bvid, req.query.cid)
     return {
       cid: info.last_play_cid || null,

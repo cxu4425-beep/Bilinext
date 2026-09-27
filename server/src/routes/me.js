@@ -1,11 +1,11 @@
 import * as api from '../bili/api.js'
-import { store } from '../util/store.js'
+import { currentAccount } from '../bili/client.js'
 import { normaliseCard } from './content.js'
 import { IMG, viaProxy } from '../util/images.js'
 import { normaliseDynamic } from '../util/dynamic.js'
 
 function requireMid(reply) {
-  const acc = store.activeAccount()
+  const acc = currentAccount()
   if (!acc) {
     reply.code(401).send({ error: '尚未登入' })
     return null

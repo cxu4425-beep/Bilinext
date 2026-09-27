@@ -1,56 +1,94 @@
+import { MULTI_USER } from '../config.js'
 import { store } from '../util/store.js'
 import { generateQr, logout, pollQr } from '../bili/login.js'
 import { getNav, getNavStat } from '../bili/api.js'
-import { isLoggedIn } from '../bili/client.js'
+import { currentAccount, isLoggedIn } from '../bili/client.js'
+import { currentToken } from '../util/ctx.js'
 import { IMG, viaProxy } from '../util/images.js'
 
 export default async function authRoutes(app) {
   app.get('/api/auth/qr', async () => generateQr())
 
-  app.get('/api/auth/qr/poll', async (req) => pollQr(req.query.key))
+  /**
+   * A successful scan is what creates a session: the token it returns is how
+   * every later request says which account it is acting as.
+   */
+  app.get('/api/auth/qr/poll', async (req) => {
+    const res = await pollQr(req.query.key)
+    if (res.status === 'ok' && MULTI_USER) res.session = store.createSession(res.mid)
+    return res
+  })
 
   app.get('/api/auth/me', async () => {
-    const account = store.activeAccount()
-    if (!account) return { loggedIn: false, account: null }
+    const account = currentAccount()
+    if (!account) return { loggedIn: false, account: null, multiUser: MULTI_USER }
 
     try {
       const [nav, stat] = await Promise.all([getNav(), getNavStat().catch(() => null)])
-      const merged = store.saveAccount({
-        ...account,
-        name: nav.uname,
-        // Stored raw so a later re-proxy can pick a different size; the browser
-        // is only ever handed the proxied, cropped form below.
-        face: nav.face,
-        level: nav.level_info?.current_level,
-      })
+      const merged = store.saveAccount(
+        {
+          ...account,
+          name: nav.uname,
+          // Stored raw so a later re-proxy can pick a different size; the browser
+          // is only ever handed the proxied, cropped form below.
+          face: nav.face,
+          level: nav.level_info?.current_level,
+        },
+        { makeActive: !MULTI_USER },
+      )
       const { cookies, refreshToken, ...safe } = merged
       return {
         loggedIn: Boolean(nav.isLogin),
         account: { ...safe, face: viaProxy(safe.face, 'image', IMG.avatar) },
         coins: nav.money,
         stat,
+        multiUser: MULTI_USER,
       }
     } catch (err) {
       // An expired SESSDATA should read as "logged out", not as a crash.
-      return { loggedIn: false, account: null, error: err.message }
+      return { loggedIn: false, account: null, error: err.message, multiUser: MULTI_USER }
     }
   })
 
-  app.get('/api/auth/accounts', async () => ({
-    accounts: store
-      .listAccounts()
-      .map((a) => ({ ...a, face: viaProxy(a.face, 'image', IMG.avatar) })),
-    activeMid: store.all.activeMid,
-  }))
+  /**
+   * Account switching is a single-user convenience. Sharing the server means
+   * the list of everyone signed in is nobody else's business, so each session
+   * only ever sees its own account.
+   */
+  app.get('/api/auth/accounts', async () => {
+    const accounts = MULTI_USER
+      ? [currentAccount()].filter(Boolean).map(({ cookies, refreshToken, ...safe }) => safe)
+      : store.listAccounts()
+    return {
+      accounts: accounts.map((a) => ({ ...a, face: viaProxy(a.face, 'image', IMG.avatar) })),
+      activeMid: MULTI_USER ? (currentAccount()?.mid ?? null) : store.all.activeMid,
+      multiUser: MULTI_USER,
+    }
+  })
 
-  app.post('/api/auth/switch', async (req) => {
+  app.post('/api/auth/switch', async (req, reply) => {
+    if (MULTI_USER) return reply.code(403).send({ error: '這台伺服器不支援切換帳號' })
     const acc = store.switchAccount(String(req.body.mid))
     if (!acc) return { ok: false, error: 'unknown account' }
     const { cookies, refreshToken, ...safe } = acc
     return { ok: true, account: { ...safe, face: viaProxy(safe.face, 'image', IMG.avatar) } }
   })
 
+  /**
+   * Signing out takes the stored bilibili cookies with it, not just the
+   * session: leaving someone's credentials on a stranger's machine after they
+   * asked to leave would be the wrong default.
+   */
   app.post('/api/auth/logout', async (req) => {
+    if (MULTI_USER) {
+      const mid = currentAccount()?.mid
+      store.deleteSession(currentToken())
+      if (mid) {
+        store.revokeSessions(mid)
+        await logout(mid)
+      }
+      return { ok: true }
+    }
     const mid = String(req.body?.mid || store.all.activeMid || '')
     if (mid) await logout(mid)
     return { ok: true }

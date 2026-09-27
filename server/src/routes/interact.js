@@ -1,7 +1,7 @@
 import { FormData, request } from 'undici'
 import * as api from '../bili/api.js'
 import { BILI_HEADERS } from '../config.js'
-import { csrfToken } from '../bili/client.js'
+import { csrfToken, currentAccount } from '../bili/client.js'
 import { store } from '../util/store.js'
 import { IMG, viaProxy } from '../util/images.js'
 
@@ -207,7 +207,7 @@ export default async function interactRoutes(app) {
     form.set('category', 'daily')
     form.set('csrf', csrf)
 
-    const acc = store.activeAccount()
+    const acc = currentAccount()
     const cookie = Object.entries(acc?.cookies || {})
       .map(([k, v]) => `${k}=${v}`)
       .join('; ')

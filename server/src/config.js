@@ -23,6 +23,23 @@ export const HOST = process.env.HOST || '127.0.0.1'
 export const ACCESS_KEY = process.env.BILI_ACCESS_KEY || ''
 
 /**
+ * Serves several people at once: each signs in with their own QR code and gets
+ * a session token, and requests act as whoever presented one. Off by default,
+ * because it changes what this server is -- a personal proxy becomes a service
+ * holding other people's bilibili credentials.
+ */
+export const MULTI_USER = process.env.BILI_MULTI_USER === '1'
+
+/** 0 means no limit. A brake for when "anyone may join" turns out too open. */
+export const MAX_ACCOUNTS = Number(process.env.BILI_MAX_ACCOUNTS || 0)
+
+/**
+ * Idle sessions expire, taking the stored bilibili cookies with them. Nobody's
+ * credentials should sit on someone else's computer indefinitely.
+ */
+export const SESSION_DAYS = Number(process.env.BILI_SESSION_DAYS || 30)
+
+/**
  * Extra browser origins allowed to call the API, comma separated. Needed when
  * the front end is hosted somewhere else than the server -- GitHub Pages, say.
  */

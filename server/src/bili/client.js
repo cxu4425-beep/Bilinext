@@ -1,7 +1,8 @@
 import crypto from 'node:crypto'
 import { request } from 'undici'
-import { BILI_HEADERS, ENDPOINTS } from '../config.js'
+import { BILI_HEADERS, ENDPOINTS, MULTI_USER } from '../config.js'
 import { store } from '../util/store.js'
+import { currentMid } from '../util/ctx.js'
 import { createWbi, signParams } from './wbi.js'
 
 export class BiliError extends Error {
@@ -114,18 +115,30 @@ export const DM_PARAMS = {
   dm_img_inter: '{"ds":[],"wh":[0,0,0],"of":[0,0,0]}',
 }
 
+/**
+ * The account this request acts as. With several people signed in, that is
+ * whoever presented a session token; with one, it is the single stored
+ * account. Never both: in multi-user mode a request without a session is
+ * anonymous rather than borrowing the owner's login.
+ */
+export function currentAccount() {
+  const mid = currentMid()
+  if (mid) return store.account(mid)
+  return MULTI_USER ? null : store.activeAccount()
+}
+
 async function currentCookies() {
   const anon = await ensureAnonCookies()
-  const acc = store.activeAccount()
+  const acc = currentAccount()
   return { ...anon, ...(acc?.cookies || {}) }
 }
 
 export function csrfToken() {
-  return store.activeAccount()?.cookies?.bili_jct || ''
+  return currentAccount()?.cookies?.bili_jct || ''
 }
 
 export function isLoggedIn() {
-  return Boolean(store.activeAccount()?.cookies?.SESSDATA)
+  return Boolean(currentAccount()?.cookies?.SESSDATA)
 }
 
 async function call(method, url, { params, form, json, headers, raw } = {}) {
@@ -157,8 +170,10 @@ async function call(method, url, { params, form, json, headers, raw } = {}) {
 
   const res = await request(target, init)
 
+  // Refreshed cookies belong to whoever made the call, not to whichever
+  // account happens to be the default one.
   const fresh = parseSetCookie(res.headers)
-  const acc = store.activeAccount()
+  const acc = currentAccount()
   if (acc && Object.keys(fresh).length) store.mergeCookies(acc.mid, fresh)
 
   if (raw) return res

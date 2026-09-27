@@ -1,6 +1,7 @@
 import { request } from 'undici'
-import { BILI_HEADERS, ENDPOINTS } from '../config.js'
+import { BILI_HEADERS, ENDPOINTS, MAX_ACCOUNTS, MULTI_USER } from '../config.js'
 import { store } from '../util/store.js'
+import { withAccount } from '../util/ctx.js'
 import { bili } from './client.js'
 import { IMG, viaProxy } from '../util/images.js'
 
@@ -46,6 +47,17 @@ export async function pollQr(qrcodeKey) {
     return { status: 'pending', code: -1, message: '登入回應缺少憑證,請重試' }
   }
 
+  // A cap is the only brake on an open server; refusing at the last step is
+  // better than storing credentials it was never going to serve.
+  if (
+    MULTI_USER &&
+    MAX_ACCOUNTS &&
+    !store.account(cookies.DedeUserID) &&
+    store.countAccounts() >= MAX_ACCOUNTS
+  ) {
+    return { status: 'error', message: '這台伺服器的帳號數已達上限,請聯絡管理者' }
+  }
+
   // refresh_token lets us renew the session later without another scan.
   const account = {
     mid: String(cookies.DedeUserID),
@@ -53,19 +65,31 @@ export async function pollQr(qrcodeKey) {
     refreshToken: body.data.refresh_token || null,
     addedAt: Date.now(),
   }
-  store.saveAccount(account)
+  // Someone else signing in must not move everyone else onto their account,
+  // so only single-user mode promotes the newcomer to "the" account.
+  const keep = { makeActive: !MULTI_USER }
+  store.saveAccount(account, keep)
 
-  const nav = await bili.get('/x/web-interface/nav')
-  const full = store.saveAccount({
-    ...account,
-    name: nav.uname,
-    face: nav.face,
-    level: nav.level_info?.current_level,
-    vipStatus: nav.vipStatus,
-  })
+  // Explicitly as the account that just signed in: with several people on one
+  // server there is no current account for this call to inherit.
+  const nav = await withAccount(account.mid, () => bili.get('/x/web-interface/nav'))
+  const full = store.saveAccount(
+    {
+      ...account,
+      name: nav.uname,
+      face: nav.face,
+      level: nav.level_info?.current_level,
+      vipStatus: nav.vipStatus,
+    },
+    keep,
+  )
 
   const { cookies: _hidden, refreshToken: _rt, ...safe } = full
-  return { status: 'ok', account: { ...safe, face: viaProxy(safe.face, 'image', IMG.avatar) } }
+  return {
+    status: 'ok',
+    mid: account.mid,
+    account: { ...safe, face: viaProxy(safe.face, 'image', IMG.avatar) },
+  }
 }
 
 export async function logout(mid) {

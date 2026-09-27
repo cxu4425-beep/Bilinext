@@ -5,7 +5,17 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
 import fastifyStatic from '@fastify/static'
-import { ACCESS_KEY, EXTRA_ORIGINS, HOST, PORT, WEB_DIST } from './config.js'
+import {
+  ACCESS_KEY,
+  EXTRA_ORIGINS,
+  HOST,
+  MULTI_USER,
+  PORT,
+  SESSION_DAYS,
+  WEB_DIST,
+} from './config.js'
+import { requestCtx } from './util/ctx.js'
+import { store } from './util/store.js'
 import { BiliError } from './bili/client.js'
 import authRoutes from './routes/auth.js'
 import contentRoutes from './routes/content.js'
@@ -41,6 +51,20 @@ await app.register(multipart, {
   limits: { fileSize: 8 * 1024 * 1024 * 1024, files: 1 },
 })
 
+/**
+ * Establishes who the request is before anything else runs. The credential is
+ * read from a header, or from the query string for media and images, which are
+ * fetched by elements that cannot set headers.
+ *
+ * Fastify carries on inside `done()`, so running it within the context makes
+ * that context visible to every later hook and to the route handler.
+ */
+app.addHook('onRequest', (req, reply, done) => {
+  const token = String(req.headers['x-bili-key'] || req.query?.k || '')
+  const mid = MULTI_USER && token ? store.sessionMid(token, SESSION_DAYS * 86_400_000) : null
+  requestCtx.run({ token: token || null, mid }, done)
+})
+
 /** Constant-time compare, so a wrong key cannot be found byte by byte. */
 function keyMatches(given) {
   if (!given) return false
@@ -56,7 +80,9 @@ function keyMatches(given) {
  * the right address, and does it want a key?" before it has one.
  */
 app.addHook('onRequest', async (req, reply) => {
-  if (!ACCESS_KEY || req.method === 'OPTIONS') return
+  // Multi-user mode authorises per session instead: a request without one is
+  // anonymous and simply cannot reach anything that needs an account.
+  if (MULTI_USER || !ACCESS_KEY || req.method === 'OPTIONS') return
   if (!req.url.startsWith('/api/') || req.url.startsWith('/api/health')) return
   // Media and images are loaded by elements that cannot send headers, so the
   // key is accepted from the query string as well (see viaProxy).
@@ -107,7 +133,8 @@ app.get('/api/health', async () => ({
   ok: true,
   version: '0.1.0',
   // Lets a client tell "wrong address" apart from "right address, needs a key".
-  needsKey: Boolean(ACCESS_KEY),
+  needsKey: Boolean(ACCESS_KEY) && !MULTI_USER,
+  multiUser: MULTI_USER,
 }))
 
 // Serve the built PWA when it exists, so `npm start` is the whole production

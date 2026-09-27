@@ -1,4 +1,5 @@
 import { ACCESS_KEY } from '../config.js'
+import { currentToken } from './ctx.js'
 
 /**
  * hdslb serves resized, re-encoded derivatives through an `@`-suffix on the
@@ -33,5 +34,8 @@ function sized(url, variant) {
 export const viaProxy = (url, kind = 'media', variant = '') => {
   if (!url) return url
   const q = `url=${encodeURIComponent(sized(url, variant))}`
-  return `/api/proxy/${kind}?${q}${ACCESS_KEY ? `&k=${encodeURIComponent(ACCESS_KEY)}` : ''}`
+  // The caller's own credential, so each person's media URLs carry their own
+  // session rather than a shared secret.
+  const token = currentToken() || ACCESS_KEY
+  return `/api/proxy/${kind}?${q}${token ? `&k=${encodeURIComponent(token)}` : ''}`
 }

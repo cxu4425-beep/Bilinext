@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { ApiError, api, onConnectivity, ping } from '@/api/client'
+import { ApiError, api, onConnectivity, ping, setServerKey } from '@/api/client'
 
 export type Account = {
   mid: string
@@ -16,6 +16,8 @@ type State = {
   ready: boolean
   /** False when the local server is unreachable -- distinct from being logged out. */
   serverOnline: boolean
+  /** The server is shared: signing out has to drop the session token too. */
+  multiUser: boolean
   coins?: number
   unread: { at: number; like: number; reply: number; systemMsg: number; dm: number }
   toasts: Toast[]
@@ -38,6 +40,7 @@ export const useApp = create<State>((set, get) => ({
   loggedIn: false,
   ready: false,
   serverOnline: true,
+  multiUser: false,
   unread: { at: 0, like: 0, reply: 0, systemMsg: 0, dm: 0 },
   toasts: [],
   theme: (localStorage.getItem('bili.theme') as 'dark' | 'light') || 'dark',
@@ -49,6 +52,7 @@ export const useApp = create<State>((set, get) => ({
         account: me.account,
         loggedIn: me.loggedIn,
         coins: me.coins,
+        multiUser: Boolean(me.multiUser),
         ready: true,
         serverOnline: true,
       })
@@ -81,6 +85,9 @@ export const useApp = create<State>((set, get) => ({
 
   logout: async () => {
     await api.post('/api/auth/logout', { mid: get().account?.mid })
+    // On a shared server the session token is the login; keeping it would
+    // leave the app pointing at an account that no longer exists.
+    if (get().multiUser) setServerKey('')
     set({ account: null, loggedIn: false })
     get().toast('已登出', 'ok')
   },

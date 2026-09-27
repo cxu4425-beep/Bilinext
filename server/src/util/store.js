@@ -50,6 +50,11 @@ const DEFAULTS = {
   /** mid -> { mid, name, face, cookies: {name: value}, addedAt } */
   accounts: {},
   activeMid: null,
+  /**
+   * sha256(token) -> { mid, createdAt, lastSeen }. Only the hash is kept, so a
+   * stolen copy of this file cannot be replayed as somebody's session.
+   */
+  sessions: {},
   settings: { preferredQuality: 80, autoplay: true, theme: 'dark', danmakuOn: true },
 }
 
@@ -71,6 +76,8 @@ function read() {
   }
   return cache
 }
+
+const sessionId = (token) => crypto.createHash('sha256').update(String(token)).digest('hex')
 
 function flush() {
   fs.writeFileSync(DB_FILE, encrypt(JSON.stringify(cache)), { mode: 0o600 })
@@ -95,12 +102,84 @@ export const store = {
     const db = read()
     return db.activeMid ? db.accounts[db.activeMid] || null : null
   },
-  saveAccount(account) {
+  account(mid) {
+    return mid ? read().accounts[String(mid)] || null : null
+  },
+  countAccounts() {
+    return Object.keys(read().accounts).length
+  },
+  /**
+   * `makeActive` is what single-user mode relies on: there, the last account to
+   * sign in is the one every request uses. With several people signed in there
+   * is no such thing as "the" account, so their logins must not move it.
+   */
+  saveAccount(account, { makeActive = true } = {}) {
     const db = read()
     db.accounts[account.mid] = { ...(db.accounts[account.mid] || {}), ...account }
-    db.activeMid = String(account.mid)
+    if (makeActive) db.activeMid = String(account.mid)
     flush()
     return db.accounts[account.mid]
+  },
+
+  /* ------------------------------------------------------------- sessions */
+
+  createSession(mid) {
+    const token = crypto.randomBytes(32).toString('base64url')
+    const db = read()
+    db.sessions[sessionId(token)] = {
+      mid: String(mid),
+      createdAt: Date.now(),
+      lastSeen: Date.now(),
+    }
+    flush()
+    return token
+  },
+  /** The account a token belongs to, or null if unknown or long unused. */
+  sessionMid(token, maxAgeMs = 0) {
+    if (!token) return null
+    const db = read()
+    const id = sessionId(token)
+    const session = db.sessions[id]
+    if (!session) return null
+    if (maxAgeMs && Date.now() - session.lastSeen > maxAgeMs) {
+      delete db.sessions[id]
+      flush()
+      return null
+    }
+    // Writing on every request would re-encrypt the whole store several times
+    // a second; an hour's resolution is plenty for an expiry measured in days.
+    if (Date.now() - session.lastSeen > 3_600_000) {
+      session.lastSeen = Date.now()
+      flush()
+    }
+    return session.mid
+  },
+  deleteSession(token) {
+    if (!token) return
+    const db = read()
+    if (delete db.sessions[sessionId(token)]) flush()
+  },
+  /** Kicks an account out everywhere it is signed in. */
+  revokeSessions(mid) {
+    const db = read()
+    let removed = 0
+    for (const [id, s] of Object.entries(db.sessions)) {
+      if (s.mid === String(mid)) {
+        delete db.sessions[id]
+        removed++
+      }
+    }
+    if (removed) flush()
+    return removed
+  },
+  listSessions() {
+    const db = read()
+    return Object.values(db.sessions).map(({ mid, createdAt, lastSeen }) => ({
+      mid,
+      createdAt,
+      lastSeen,
+      name: db.accounts[mid]?.name ?? null,
+    }))
   },
   switchAccount(mid) {
     const db = read()

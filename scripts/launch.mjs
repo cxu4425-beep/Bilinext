@@ -24,6 +24,12 @@ const DATA = path.join(ROOT, 'data')
 const KEY_FILE = path.join(DATA, 'access-key')
 const PAGES_ORIGIN = 'https://cxu4425-beep.github.io'
 const WIN = process.platform === 'win32'
+/**
+ * `bilinext.cmd multi` serves several people: each signs in with their own QR
+ * code and gets their own session, and no shared key is used. Anyone who can
+ * reach the address can join, which is the point and also the risk.
+ */
+const MULTI = process.argv.slice(2).includes('multi') || process.env.BILI_MULTI_USER === '1'
 
 const line = (s = '') => console.log(s)
 const rule = () => line('  ' + '-'.repeat(62))
@@ -175,7 +181,8 @@ async function main() {
     if (!run('npm', ['run', 'build'])) return shutdown(1)
   }
 
-  const key = accessKey()
+  // A shared key makes no sense once each person has a session of their own.
+  const key = MULTI ? '' : accessKey()
   const server = spawn(process.execPath, [path.join('server', 'src', 'index.js')], {
     cwd: ROOT,
     stdio: 'inherit',
@@ -186,6 +193,7 @@ async function main() {
       HOST: '0.0.0.0',
       PORT: String(PORT),
       BILI_ACCESS_KEY: key,
+      BILI_MULTI_USER: MULTI ? '1' : '',
       BILI_ALLOWED_ORIGINS: PAGES_ORIGIN,
       LOG_LEVEL: process.env.LOG_LEVEL || 'warn',
     },
@@ -212,25 +220,35 @@ async function main() {
     tunnel = await startTunnel(bin)
   }
 
-  const setupLink = (base) => `${base}/#/setup?key=${key}`
+  // With sessions there is nothing to hand the phone but the address itself.
+  const setupLink = (base) => (MULTI ? `${base}/` : `${base}/#/setup?key=${key}`)
   const best = tunnel?.url || (lan ? `http://${lan}:${PORT}` : `http://localhost:${PORT}`)
 
   line()
   rule()
-  line('  BiliNext is running. Keep this window open.')
+  line(MULTI ? '  BiliNext is running in multi-user mode. Keep this window open.' : '  BiliNext is running. Keep this window open.')
   rule()
   line(`  On this computer   http://localhost:${PORT}`)
   if (lan) line(`  On your Wi-Fi      http://${lan}:${PORT}`)
   if (tunnel) line(`  From anywhere      ${tunnel.url}`)
   line()
-  line(`  Access key         ${key}`)
+  if (MULTI) {
+    line('  Anyone who opens this address can sign in with their own bilibili')
+    line('  account, and their credentials are then stored on this computer.')
+  } else {
+    line(`  Access key         ${key}`)
+  }
   if (!tunnel) {
     line()
     line(bin ? '  The tunnel did not start; only local addresses work.' : '  No public address: cloudflared is not installed.')
     line('      winget install --id Cloudflare.cloudflared -e')
   }
   rule()
-  line('  Scan with your phone to open the app with the key already filled in:')
+  line(
+    MULTI
+      ? '  Scan with your phone to open the app and sign in:'
+      : '  Scan with your phone to open the app with the key already filled in:',
+  )
   line(`  ${setupLink(best)}`)
   line()
   line(await QRCode.toString(setupLink(best), { type: 'terminal', small: true }))

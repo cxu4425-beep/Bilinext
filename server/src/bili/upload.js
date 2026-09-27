@@ -3,7 +3,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { request } from 'undici'
 import { BILI_HEADERS, DATA_DIR } from '../config.js'
-import { csrfToken } from './client.js'
+import { csrfToken, currentAccount } from './client.js'
 import { store } from '../util/store.js'
 
 const TMP = path.join(DATA_DIR, 'uploads')
@@ -13,7 +13,7 @@ fs.mkdirSync(TMP, { recursive: true })
 export const jobs = new Map()
 
 function cookieHeader() {
-  return Object.entries(store.activeAccount()?.cookies || {})
+  return Object.entries(currentAccount()?.cookies || {})
     .map(([k, v]) => `${k}=${v}`)
     .join('; ')
 }

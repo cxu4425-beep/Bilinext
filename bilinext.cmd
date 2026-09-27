@@ -9,6 +9,6 @@ REM reach it, then prints the addresses and a QR code for the phone.
 REM
 REM Keep this window open while you use the app; closing it stops the server.
 
-node scripts\launch.mjs
+node scripts\launch.mjs %*
 echo.
 pause

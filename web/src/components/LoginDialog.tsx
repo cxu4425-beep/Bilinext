@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { api } from '@/api/client'
+import { api, setServerKey } from '@/api/client'
 import { useApp } from '@/store/app'
 import * as I from './Icons'
 
@@ -42,8 +42,16 @@ export default function LoginDialog({ open, onClose }: { open: boolean; onClose:
           try {
             const res = await api.get('/api/auth/qr/poll', { params: { key } })
             if (cancelled) return
+            if (res.status === 'error') {
+              setStatus('error')
+              setMessage(res.message || '登入失敗')
+              return
+            }
             if (res.status === 'ok') {
               setStatus('ok')
+              // On a shared server the scan is what creates the session; from
+              // here on every request identifies itself with this token.
+              if (res.session) setServerKey(res.session)
               await refreshMe()
               toast(`已登入:${res.account?.name ?? ''}`, 'ok')
               setTimeout(onClose, 700)
