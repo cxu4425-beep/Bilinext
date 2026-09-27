@@ -224,6 +224,25 @@ async function main() {
   const setupLink = (base) => (MULTI ? `${base}/` : `${base}/#/setup?key=${key}`)
   const best = tunnel?.url || (lan ? `http://${lan}:${PORT}` : `http://localhost:${PORT}`)
 
+  // Also written to a file: the tunnel address is random, and copying it out
+  // of a console window is miserable. data/ is not in git.
+  fs.writeFileSync(
+    path.join(DATA, 'addresses.json'),
+    JSON.stringify(
+      {
+        startedAt: new Date().toISOString(),
+        multiUser: MULTI,
+        local: `http://localhost:${PORT}`,
+        lan: lan ? `http://${lan}:${PORT}` : null,
+        public: tunnel?.url ?? null,
+        accessKey: key || null,
+        shareLink: setupLink(best),
+      },
+      null,
+      2,
+    ) + '\n',
+  )
+
   line()
   rule()
   line(MULTI ? '  BiliNext is running in multi-user mode. Keep this window open.' : '  BiliNext is running. Keep this window open.')
