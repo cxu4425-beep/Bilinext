@@ -187,7 +187,12 @@ async function call(method, url, { params, form, json, headers, raw } = {}) {
     // not a malformed response. Report it as the rate limit it actually is so
     // the UI can tell the user to slow down instead of showing a page of HTML.
     if (res.statusCode === 412 || text.trimStart().startsWith('<')) {
-      throw new BiliError(-352, '被 bilibili 風控攔截,請稍後再試(請求過於頻繁)')
+      const err = new BiliError(-352, '被 bilibili 風控攔截,請稍後再試(請求過於頻繁)')
+      // The wall is per address and per endpoint, not per device identity:
+      // retrying with a fresh buvid does not get past it, it only spends more
+      // of whatever quota is left. Callers need to tell the two apart.
+      err.crawlerWall = true
+      throw err
     }
     throw new BiliError(-1, `non-JSON response from ${target.pathname}: ${text.slice(0, 200)}`)
   }

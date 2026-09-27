@@ -2,7 +2,7 @@ import { request } from 'undici'
 import { BILI_HEADERS, ENDPOINTS, MAX_ACCOUNTS, MULTI_USER } from '../config.js'
 import { store } from '../util/store.js'
 import { withAccount } from '../util/ctx.js'
-import { bili, refreshDeviceIdentity } from './client.js'
+import { BiliError, bili, refreshDeviceIdentity } from './client.js'
 import { IMG, viaProxy } from '../util/images.js'
 
 const POLL_MESSAGES = {
@@ -16,7 +16,25 @@ const POLL_MESSAGES = {
  * QR login is deliberately the only supported path: the password never leaves
  * the official app, and this client only ever receives the resulting cookies.
  */
+/**
+ * When the login endpoint has walled this address, nothing here can talk it
+ * round -- and every further attempt spends more of the quota that decides
+ * when it reopens. Verified: the plain call, the call with the real login
+ * page's parameters, and the call with a fresh device identity and a passport
+ * Referer all get the same 412 wall. So the door is simply held shut for a
+ * while, and the wait is reported instead of being turned into more traffic.
+ */
+let wallUntil = 0
+
 export async function generateQr() {
+  const waitSeconds = Math.ceil((wallUntil - Date.now()) / 1000)
+  if (waitSeconds > 0) {
+    throw new BiliError(
+      -352,
+      `bilibili 暫時擋下了登入請求,請等約 ${waitSeconds} 秒再試(一直重試會讓封鎖變長)`,
+    )
+  }
+
   const ask = async () => {
     const data = await bili.get(`${ENDPOINTS.passport}/x/passport-login/web/qrcode/generate`)
     return { url: data.url, key: data.qrcode_key }
@@ -24,6 +42,13 @@ export async function generateQr() {
   try {
     return await ask()
   } catch (err) {
+    if (err?.crawlerWall) {
+      wallUntil = Date.now() + 90_000
+      throw new BiliError(
+        -352,
+        'bilibili 暫時擋下了登入請求(反爬蟲牆)。請等約 90 秒再按一次登入 —— 反覆重試會延長封鎖。',
+      )
+    }
     // Risk control attaches to the anonymous device identity, and a flagged one
     // stays flagged -- every later attempt fails identically until it is
     // replaced. That is fatal here in a way it is not elsewhere: this is the
