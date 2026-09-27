@@ -31,7 +31,8 @@
 | 你想做的事 | 看這裡 |
 | --- | --- |
 | 在這台電腦上跑起來 | [快速開始](#快速開始) |
-| 用手機看 | [手機使用](#手機使用) |
+| 用手機看(同一個 Wi-Fi) | [手機使用](#手機使用) |
+| 在外面也能看 | [從外面連(公開網址)](#從外面連公開網址) |
 | 裝成 App | [打包成安裝檔](#打包成安裝檔) |
 | 知道它靠不靠得住 | [已知限制](#已知限制)、[安全性設計](#安全性設計) |
 
@@ -134,6 +135,62 @@ $env:HOST='0.0.0.0'; npm start       # PowerShell
 - **APK** —— 見下方「打包成安裝檔」。
 
 兩種都需要伺服器在區網模式下執行;`start-bilinext.cmd`(不帶 lan)只有這台電腦連得到。
+
+## 從外面連(公開網址)
+
+想在外面用手機看,而不是只在家裡的 Wi-Fi,需要兩件事:伺服器要有一個 **https** 網址,而且要有**存取金鑰**。
+
+### 為什麼一定要金鑰
+
+這台伺服器已經登入你的 bilibili 帳號,而且沒有任何密碼保護 —— 放到公網上,**拿到網址的人就等於拿到你的帳號**。
+所以設了 `BILI_ACCESS_KEY` 之後,每個 `/api` 呼叫都要帶著它才會被受理(健康檢查除外,它要能回答「這個位址對不對、需不需要金鑰」)。
+
+金鑰有兩種傳法,因為**圖片和影片是 `<img>` / `<video>` 在載入的,沒辦法帶 header**:
+
+| 請求 | 金鑰怎麼帶 |
+| --- | --- |
+| API(fetch / XHR) | `x-bili-key` 標頭 |
+| `/api/proxy/image`、`/api/proxy/media` | 網址上的 `?k=`,由伺服器產生連結時自動加上 |
+
+代價是金鑰會出現在圖片網址裡(瀏覽器的網路紀錄看得到)。自用可以接受,但**別把畫面或網址分享出去**。
+
+### 開一條通道
+
+```
+start-bilinext-tunnel.cmd
+```
+
+它會:第一次執行時產生金鑰存在 `data\access-key`(不會進 git)、把伺服器綁在 `127.0.0.1`(外面只能從通道進來)、
+開一個 Cloudflare quick tunnel 並在另一個視窗印出 `https://xxx.trycloudflare.com` 這樣的網址。
+
+需要先裝一次 cloudflared:
+
+```bash
+winget install --id Cloudflare.cloudflared -e
+```
+
+**quick tunnel 的網址每次重開都會變。** 要固定網址得註冊 Cloudflare 帳號建一條具名 tunnel,那是另一套設定。
+
+拿到網址後,在 App 的設定畫面填網址和金鑰就能用了。
+
+### 從 GitHub Pages 使用
+
+`https://cxu4425-beep.github.io/Bilinext/` 放的是**只有前端**的版本,由 `.github/workflows/pages.yml` 在每次推上 main 時自動建置。
+
+它一樣要連到你的伺服器,而且**只能連 https 的位址** —— Pages 強制 https,瀏覽器禁止 https 頁面呼叫 http,
+所以填家裡的 `http://192.168.x.x:8787` 一定會被擋掉,必須用上面的通道網址。
+
+伺服器那邊要允許這個來源(`start-bilinext-tunnel.cmd` 已經設好了):
+
+```
+set BILI_ALLOWED_ORIGINS=https://cxu4425-beep.github.io
+```
+
+這份 build 和瀏覽器版有三個差別:網址前綴是 `/Bilinext/`、用 hash 路由(Pages 沒有 fallback 到 index.html)、
+沒有 Service Worker(部署後才不會繼續拿到舊的殼)。
+
+> 說實話:通道網址本身就已經是完整的 App 了(伺服器會把前端一起送出去),同源、不用 CORS、不用把金鑰放進網址。
+> Pages 這條路的好處只是網址好記、不會每次變。
 
 ## 打包成安裝檔
 
