@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useApp } from '@/store/app'
-import { NATIVE, setServerUrl } from '@/api/client'
+import { REMOTE_API, serverKey, setServerKey, setServerUrl } from '@/api/client'
 
 /**
  * Mostly here for the packaged Android app: the APK ships only the front end,
@@ -10,18 +10,29 @@ import { NATIVE, setServerUrl } from '@/api/client'
 export default function Settings() {
   const { theme, toggleTheme, toast } = useApp()
   const [server, setServer] = useState(localStorage.getItem('bili.serverUrl') || '')
+  const [key, setKey] = useState(serverKey())
   const [autoplay, setAutoplay] = useState(localStorage.getItem('bili.autoplay') !== '0')
   const [checking, setChecking] = useState(false)
 
   const isPackaged =
-    NATIVE || (typeof window !== 'undefined' && window.location.protocol === 'tauri:')
+    REMOTE_API || (typeof window !== 'undefined' && window.location.protocol === 'tauri:')
 
   const test = async () => {
     setChecking(true)
     try {
-      const res = await fetch(`${server.replace(/\/$/, '')}/api/health`)
-      const body = await res.json()
-      toast(body.ok ? `連線成功(v${body.version})` : '回應異常', body.ok ? 'ok' : 'error')
+      const base = server.replace(/\/$/, '')
+      const body = await fetch(`${base}/api/health`).then((r) => r.json())
+      if (!body.ok) return toast('回應異常', 'error')
+      // Health answers without a key, so "reachable" is not yet "usable":
+      // check an endpoint behind the guard before calling it a success.
+      if (body.needsKey) {
+        const res = await fetch(`${base}/api/auth/me`, { headers: key ? { 'x-bili-key': key } : {} })
+        return toast(
+          res.status === 401 ? '連線成功,但金鑰不正確' : `連線成功(v${body.version})`,
+          res.status === 401 ? 'error' : 'ok',
+        )
+      }
+      toast(`連線成功(v${body.version})`, 'ok')
     } catch {
       toast('連不上這個位址', 'error')
     } finally {
@@ -86,9 +97,20 @@ export default function Settings() {
             測試
           </button>
         </div>
+        <input
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="存取金鑰(伺服器有設才需要)"
+          type="password"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          className="input w-full mt-2"
+        />
         <button
           onClick={() => {
             setServerUrl(server.replace(/\/$/, ''))
+            setServerKey(key.trim())
             toast('已儲存,重新載入中…', 'ok')
             // The API base is read once when the module loads, so a new address
             // only takes effect on a reload. Doing it here saves the user

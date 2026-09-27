@@ -9,6 +9,14 @@
 export const NATIVE = import.meta.env.VITE_NATIVE === '1'
 
 /**
+ * True for any build whose API lives on another origin: the Android app, and
+ * the GitHub Pages build. Both need to be told a server address, both must
+ * send the access key themselves, and neither can rely on a server to map
+ * /video/BV... back to index.html.
+ */
+export const REMOTE_API = NATIVE || import.meta.env.VITE_REMOTE === '1'
+
+/**
  * In the browser and in the Tauri shell the API is same-origin (or proxied by
  * Vite). The APK ships only the front end, so it must be told where the server
  * runs -- a PC on the same Wi-Fi, or a VPS. Empty until the user sets it; the
@@ -16,12 +24,27 @@ export const NATIVE = import.meta.env.VITE_NATIVE === '1'
  */
 export const serverUrl = () => localStorage.getItem('bili.serverUrl') || ''
 const BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? (NATIVE ? serverUrl() : '')
+  (import.meta.env.VITE_API_BASE as string | undefined) ?? (REMOTE_API ? serverUrl() : '')
+
+/**
+ * The shared key a server on the public internet is configured with. Sent as a
+ * header on everything the app fetches itself; media and image URLs arrive
+ * from the server with the key already in them, because `<img>` and `<video>`
+ * cannot send headers.
+ */
+export const serverKey = () => localStorage.getItem('bili.serverKey') || ''
+export const setServerKey = (k: string) => localStorage.setItem('bili.serverKey', k)
+const keyHeader = (): Record<string, string> => {
+  const k = serverKey()
+  return k ? { 'x-bili-key': k } : {}
+}
 
 export class ApiError extends Error {
   code?: number
   needsLogin?: boolean
   riskControlled?: boolean
+  /** The server is guarded by an access key and ours is missing or wrong. */
+  needsKey?: boolean
   /** True when the request never reached the server at all. */
   offline: boolean
   status: number
@@ -31,7 +54,10 @@ export class ApiError extends Error {
     this.code = body?.code
     // status 0 means fetch itself failed: the server is down, not refusing us.
     this.offline = status === 0
-    this.needsLogin = !this.offline && (body?.needsLogin ?? status === 401)
+    this.needsKey = Boolean(body?.needsKey)
+    // A 401 from the key guard is not a bilibili login problem; saying "please
+    // log in" there would send the user off to scan a QR code for nothing.
+    this.needsLogin = !this.offline && !this.needsKey && (body?.needsLogin ?? status === 401)
     this.riskControlled = body?.riskControlled ?? status === 429
   }
 }
@@ -92,7 +118,11 @@ function seen<T>(value: T): T {
 
 export const api = {
   get: (path: string, opts: Options = {}) =>
-    fetch(url(path, opts.params), { signal: opts.signal, credentials: 'include' })
+    fetch(url(path, opts.params), {
+      signal: opts.signal,
+      headers: keyHeader(),
+      credentials: 'include',
+    })
       .then(seen, asApiError)
       .then(parse),
 
@@ -103,7 +133,7 @@ export const api = {
   post: (path: string, body?: unknown, opts: Options = {}) =>
     fetch(url(path, opts.params), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-bili-client': 'bili-next' },
+      headers: { 'content-type': 'application/json', 'x-bili-client': 'bili-next', ...keyHeader() },
       body: JSON.stringify(body ?? {}),
       signal: opts.signal,
       keepalive: opts.keepalive,
@@ -119,6 +149,7 @@ export const api = {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', url(path))
       xhr.setRequestHeader('x-bili-client', 'bili-next')
+      for (const [k, v] of Object.entries(keyHeader())) xhr.setRequestHeader(k, v)
       xhr.withCredentials = true
       // fetch() still cannot report request-body progress, so uploads stay on
       // XHR to keep the progress bar honest.
@@ -144,7 +175,7 @@ export const setServerUrl = (u: string) => localStorage.setItem('bili.serverUrl'
 
 /** Cheap liveness probe used by the reconnect banner. */
 export const ping = () =>
-  fetch(url('/api/health'), { cache: 'no-store' })
+  fetch(url('/api/health'), { cache: 'no-store', headers: keyHeader() })
     .then((r) => {
       report(r.ok)
       return r.ok

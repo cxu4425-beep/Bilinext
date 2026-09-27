@@ -1,10 +1,11 @@
 import './util/http.js'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import multipart from '@fastify/multipart'
 import fastifyStatic from '@fastify/static'
-import { HOST, PORT, WEB_DIST } from './config.js'
+import { ACCESS_KEY, EXTRA_ORIGINS, HOST, PORT, WEB_DIST } from './config.js'
 import { BiliError } from './bili/client.js'
 import authRoutes from './routes/auth.js'
 import contentRoutes from './routes/content.js'
@@ -28,15 +29,39 @@ await app.register(cors, {
       /^https?:\/\/10\.\d+\.\d+\.\d+(:\d+)?$/.test(origin) ||
       origin === 'capacitor://localhost' ||
       origin === 'http://localhost' ||
-      origin === 'tauri://localhost'
+      origin === 'tauri://localhost' ||
+      EXTRA_ORIGINS.includes(origin)
     cb(null, ok)
   },
   credentials: true,
-  allowedHeaders: ['content-type', 'x-bili-client'],
+  allowedHeaders: ['content-type', 'x-bili-client', 'x-bili-key'],
 })
 
 await app.register(multipart, {
   limits: { fileSize: 8 * 1024 * 1024 * 1024, files: 1 },
+})
+
+/** Constant-time compare, so a wrong key cannot be found byte by byte. */
+function keyMatches(given) {
+  if (!given) return false
+  const a = Buffer.from(String(given))
+  const b = Buffer.from(ACCESS_KEY)
+  return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
+/**
+ * The access key, when one is configured. Only /api is guarded: the front end
+ * itself is a shell with no data in it, and it has to load before anyone can
+ * type a key into it. Health stays open so the setup screen can ask "is this
+ * the right address, and does it want a key?" before it has one.
+ */
+app.addHook('onRequest', async (req, reply) => {
+  if (!ACCESS_KEY || req.method === 'OPTIONS') return
+  if (!req.url.startsWith('/api/') || req.url.startsWith('/api/health')) return
+  // Media and images are loaded by elements that cannot send headers, so the
+  // key is accepted from the query string as well (see viaProxy).
+  if (keyMatches(req.headers['x-bili-key'] || req.query?.k)) return
+  reply.code(401).send({ error: '需要存取金鑰', needsKey: true })
 })
 
 /**
@@ -78,7 +103,12 @@ for (const route of [
   await app.register(route)
 }
 
-app.get('/api/health', async () => ({ ok: true, version: '0.1.0' }))
+app.get('/api/health', async () => ({
+  ok: true,
+  version: '0.1.0',
+  // Lets a client tell "wrong address" apart from "right address, needs a key".
+  needsKey: Boolean(ACCESS_KEY),
+}))
 
 // Serve the built PWA when it exists, so `npm start` is the whole production
 // story; in dev, Vite serves the front end and proxies /api back here.

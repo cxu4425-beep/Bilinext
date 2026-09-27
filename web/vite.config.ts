@@ -6,16 +6,19 @@ import path from 'node:path'
 
 const API = process.env.VITE_API_TARGET || 'http://localhost:8787'
 
+/** The GitHub Pages site lives under /<repo>/, not at the domain root. */
+const PAGES_BASE = process.env.PAGES_BASE || '/Bilinext/'
+
 export default defineConfig(({ mode }) => ({
-  // The Android build is already an installed app: a service worker would only
-  // add a second, invisible copy of the shell that can go stale between
-  // reinstalls, so the PWA plugin is left out of that build entirely.
-  base: mode === 'capacitor' ? './' : '/',
+  // Neither packaged build gets a service worker: the APK is already an
+  // installed app, and on Pages a cached shell would keep serving an old copy
+  // after a deploy. Only the server's own build is a PWA.
+  base: mode === 'capacitor' ? './' : mode === 'pages' ? PAGES_BASE : '/',
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   plugins: [
     react(),
     tailwind(),
-    mode === 'capacitor'
+    mode === 'capacitor' || mode === 'pages'
       ? null
       : VitePWA({
       registerType: 'autoUpdate',
@@ -67,7 +70,7 @@ export default defineConfig(({ mode }) => ({
   // landing there would both blank the folder mid-request and leave the
   // browser serving the APK's bundle (hash routes, no API base at all).
   build: {
-    outDir: mode === 'capacitor' ? 'dist-native' : 'dist',
+    outDir: mode === 'capacitor' ? 'dist-native' : mode === 'pages' ? 'dist-pages' : 'dist',
     sourcemap: false,
     chunkSizeWarningLimit: 1200,
   },

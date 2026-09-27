@@ -14,6 +14,24 @@ export const PORT = Number(process.env.PORT || 8787)
 export const HOST = process.env.HOST || '127.0.0.1'
 
 /**
+ * Optional shared key guarding every /api call. Empty by default, because on
+ * this computer (and on your own Wi-Fi) the network itself is the boundary.
+ * Set it before putting the server on the public internet: this instance is
+ * signed in to a bilibili account and can act as it, so without a key the URL
+ * alone is the account. start-bilinext-tunnel.cmd generates one.
+ */
+export const ACCESS_KEY = process.env.BILI_ACCESS_KEY || ''
+
+/**
+ * Extra browser origins allowed to call the API, comma separated. Needed when
+ * the front end is hosted somewhere else than the server -- GitHub Pages, say.
+ */
+export const EXTRA_ORIGINS = (process.env.BILI_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim().replace(/\/$/, ''))
+  .filter(Boolean)
+
+/**
  * Bilibili's edge rejects requests that don't look like they came from its own
  * web player: it checks Referer/Origin on the API and, more strictly, on the
  * CDN that serves the actual media segments. A browser cannot forge Referer,

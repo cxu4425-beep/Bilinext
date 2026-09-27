@@ -20,7 +20,8 @@
     "android:aab": "npm run android:sync && node scripts/android-apk.mjs bundleRelease",
     "desktop:dev": "npm -w web run build && tauri dev",
     "desktop:build": "npm -w web run build && tauri build",
-    "test": "node --experimental-strip-types web/src/lib/danmakuLanes.test.ts"
+    "test": "node --experimental-strip-types web/src/lib/danmakuLanes.test.ts",
+    "build:pages": "npm -w web run build -- --mode pages"
   },
   "devDependencies": {
     "@capacitor/cli": "^7.6.9",

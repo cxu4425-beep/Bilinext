@@ -4,7 +4,7 @@ import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
 import ServerSetup from './components/ServerSetup'
-import { NATIVE, serverUrl } from './api/client'
+import { REMOTE_API, serverUrl } from './api/client'
 import './styles/index.css'
 
 const queryClient = new QueryClient({
@@ -32,14 +32,14 @@ if (saved) document.documentElement.dataset.theme = saved
  * /video/BV... has nothing to fall back to index.html; hash routes always
  * resolve. In the browser the real paths stay, so links remain shareable.
  */
-const Router = NATIVE ? HashRouter : BrowserRouter
+const Router = REMOTE_API ? HashRouter : BrowserRouter
 
 const root = createRoot(document.getElementById('root')!)
 
 // Nothing in the app works until the phone knows which machine to talk to, and
 // every page would render the same "cannot reach the server" state, so setup
 // takes over the whole app rather than being one item buried in 設定.
-if (NATIVE && !serverUrl()) {
+if (REMOTE_API && !serverUrl()) {
   root.render(
     <React.StrictMode>
       <ServerSetup />

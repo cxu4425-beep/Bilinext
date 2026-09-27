@@ -1,3 +1,5 @@
+import { ACCESS_KEY } from '../config.js'
+
 /**
  * hdslb serves resized, re-encoded derivatives through an `@`-suffix on the
  * path. Asking for the original is not merely wasteful -- a bilibili "face" can
@@ -20,6 +22,16 @@ function sized(url, variant) {
 /**
  * Rewrites a bilibili CDN url so the browser fetches it through our proxy,
  * which is the only party able to send the Referer their edge requires.
+ *
+ * When an access key is configured it is baked into the query string. Images
+ * and video are loaded by `<img>` and `<video>`, which cannot be given a
+ * header -- so for these URLs the key has to travel in the URL itself. That
+ * means it shows up in the browser's network log and in the page markup, which
+ * is the accepted trade-off for media; everything that can set a header sends
+ * it as one instead.
  */
-export const viaProxy = (url, kind = 'media', variant = '') =>
-  url ? `/api/proxy/${kind}?url=${encodeURIComponent(sized(url, variant))}` : url
+export const viaProxy = (url, kind = 'media', variant = '') => {
+  if (!url) return url
+  const q = `url=${encodeURIComponent(sized(url, variant))}`
+  return `/api/proxy/${kind}?${q}${ACCESS_KEY ? `&k=${encodeURIComponent(ACCESS_KEY)}` : ''}`
+}
